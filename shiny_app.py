@@ -20,16 +20,19 @@ if plot_width / plot_height > max_ratio:
     plot_width = int(plot_height * max_ratio)
 
 # block out the ui
-app_ui = ui.page_fluid(
-    ui.output_plot(
-        "hm_plot", 
-        click=True, 
-        width=f"{plot_width}px", 
-        height=f"{plot_height}px"
-    ),
-    ui.hr(),
-    ui.h4("Speeches:"),
-    ui.output_data_frame("speeches"),
+app_ui = ui.page_fillable(
+    ui.layout_columns(
+        ui.output_plot(
+            "hm_plot", 
+            click=True, 
+            width=f"{plot_width}px", 
+            height=f"{plot_height}px"
+        ),
+        ui.card(
+            ui.h4("Speeches:"),
+            ui.output_data_frame("speeches"),
+        ),
+    )
 )
 
 # backend function definitions
@@ -49,7 +52,7 @@ def server(input, output, session):
     def speeches():
         click = input.hm_plot_click()
         if click is None:
-            return pd.DataFrame()
+            return render.DataTable(pd.DataFrame())
         
         col_idx = int(click["x"])
         row_idx = int(click["y"])
@@ -57,10 +60,10 @@ def server(input, output, session):
         if 0 <= col_idx < len(hm.columns) and 0 <= row_idx < len(hm.index):
             before = hm.index[row_idx]
             after = hm.columns[col_idx]
-            filtered = df[(df["before"] == before) & (df["after"] == after)]
-            return render.DataGrid(filtered, width="100%", summary=False)
+            filtered = df.loc[(df["before"] == before) & (df["after"] == after), ["loci", "speaker", "notes"]]
+            return render.DataTable(filtered, width="100%", summary=False)
         else:
-            return pd.DataFrame()
+            return render.DataTable(pd.DataFrame())
 
 # configure the app
 app = App(app_ui, server, debug=True)
