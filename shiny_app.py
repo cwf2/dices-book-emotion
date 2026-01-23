@@ -29,7 +29,7 @@ app_ui = ui.page_fillable(
             height=f"{plot_height}px"
         ),
         ui.card(
-            ui.h4("Speeches:"),
+            ui.output_ui("speeches_header"),
             ui.output_data_frame("speeches"),
         ),
     )
@@ -47,6 +47,23 @@ def server(input, output, session):
             ticklabel.set_horizontalalignment("left")
         plt.tight_layout()
         return fig
+
+    @render.ui
+    def speeches_header():
+        click = input.hm_plot_click()
+        if click is None:
+            return ui.h4("")
+            
+        col_idx = int(click["x"])
+        row_idx = int(click["y"])
+        
+        if 0 <= col_idx < len(hm.columns) and 0 <= row_idx < len(hm.index):
+            before = hm.index[row_idx]
+            after = hm.columns[col_idx]
+            
+            return ui.h4(f"Before: {before}; After: {after}")
+        else:
+            return ui.h4("")
 
     @render.data_frame
     def speeches():
