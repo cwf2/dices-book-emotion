@@ -1,8 +1,10 @@
 from shiny import App, module, ui, render
+from faicons import icon_svg
 import pandas as pd
 from matplotlib import pyplot as plt
 import seaborn as sns
 import numpy as np
+import io
 import os
 
 DATA_DIR = "data"
@@ -14,7 +16,8 @@ MAX_RATIO = 2.0
 class EmotionData:
     def __init__(self, filepath):
         self.df = pd.read_csv(filepath, sep="\t", header=0,
-                 names=["loci", "before", "after", "speaker", "notes"])
+                 names=["first_line", "last_line", "before", "after", "speaker", "notes"],
+                 dtype={"first_line": str, "last_line": str})
         self.hm = pd.crosstab(self.df["before"], self.df["after"])
 
         nrows, ncols = self.hm.shape
@@ -100,7 +103,7 @@ def emotion_tab_server(input, output, session, data: EmotionData):
             after = data.hm.columns[col_idx]
             filtered = data.df.loc[
                 (data.df["before"] == before) & (data.df["after"] == after),
-                ["loci", "speaker", "notes"]
+                ["first_line", "last_line", "speaker", "notes"]
             ]
             return render.DataTable(filtered, width="100%", summary=False)
         return render.DataTable(pd.DataFrame())
@@ -112,17 +115,20 @@ spkr = EmotionData(os.path.join(DATA_DIR, "vf_spkr.tsv"))
 addr = EmotionData(os.path.join(DATA_DIR, "vf_addr.tsv"))
 
 app_ui = ui.page_navbar(
-    ui.nav_panel("Speaker",
-        emotion_tab_ui("spkr", spkr.plot_width, spkr.plot_height)
-    ),
     ui.nav_panel("Addressee",
         emotion_tab_ui("addr", addr.plot_width, addr.plot_height)
     ),
-    title="Emotion Transitions in Valerius Flaccus' Argonautica",
+    ui.nav_panel("Speaker",
+        emotion_tab_ui("spkr", spkr.plot_width, spkr.plot_height)
+    ),
+    ui.nav_spacer(),
+    ui.nav_control(ui.download_link("downloadData", ui.TagList(icon_svg("download"), " Download"))),
+    title=ui.HTML("Emotion Transitions in Valerius Flaccus’ <i>Argonautica</i>"),
     navbar_options=ui.navbar_options(bg="#2C3E50", theme="dark"),
     window_title="VF Emotion Transitions",
     header=ui.tags.style("""
         body { background-color: #ffffff; }
+        .navbar-brand { margin-right: 2rem; }
         .card { border: 1px solid #dee2e6; border-radius: 6px; }
         .card-header {
             background-color: #f8f9fa;
@@ -147,8 +153,25 @@ app_ui = ui.page_navbar(
     """),
 )
 
-def server(input, output, session):
+def server(input, output, session):    
+    @render.download(filename="vf_emotions.xlsx")
+    def downloadData():
+        def split_loci(df):
+            first = df["first_line"].str.split(".", expand=True)
+            out = df.drop(columns=["first_line", "last_line"]).copy()
+            out.insert(0, "last_line", df["last_line"].str.split(".", expand=True)[1])
+            out.insert(0, "first_line", first[1])
+            out.insert(0, "book", first[0])
+            return out
+
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+            split_loci(addr.df).to_excel(writer, sheet_name="Addressee", index=False)
+            split_loci(spkr.df).to_excel(writer, sheet_name="Speaker", index=False)
+        yield buf.getvalue()
+        
     emotion_tab_server("spkr", data=spkr)
     emotion_tab_server("addr", data=addr)
+    
 
 app = App(app_ui, server, debug=True)
